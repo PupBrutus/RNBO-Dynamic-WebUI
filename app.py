@@ -7,7 +7,7 @@ app = Flask(__name__, template_folder='templates', static_folder='static')
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    server = '192.168.1.104'
+    server = '127.0.0.1'
     port = '1234'
     data_retrieve_port = '5678'
     if request.method == 'POST':
@@ -33,4 +33,4 @@ def index():
         return "Template not found", 404
 
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=8080)  # Listen on all network interfaces
+    app.run(debug=False, host='127.0.0.1', port=8080)  # Listen on all network interfaces
