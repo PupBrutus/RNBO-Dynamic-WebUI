@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RNBO Control Server</title>
+    <script>
+        async function sendSliderValue(sliderId) {
+            const slider = document.getElementById(sliderId);
+            const instanceParam = slider.dataset.instanceParam;
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.send(`${sliderId}=${slider.value}&instanceParam=${instanceParam}&action=connect`);
+            
+            const roundedValue = parseFloat(slider.value).toFixed(1);
+            document.getElementById(`${sliderId}Value`).innerText = roundedValue;
+            console.log(`Slider ${sliderId} value sent: ${slider.value}`);
+        }
+
+        async function sendSliderValueOnRelease(sliderId) {
+            await generateControls(); // Re-download JSON and regenerate controls
+        }
+
+        async function sendDropdownValue(dropdownId) {
+            const dropdown = document.getElementById(dropdownId);
+            const instanceParam = dropdown.dataset.instanceParam;
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.send(`${dropdownId}=${dropdown.value}&instanceParam=${instanceParam}&action=connect`);
+            document.getElementById(`${dropdownId}Value`).innerText = dropdown.value; // Update value display
+            console.log(`Dropdown ${dropdownId} value sent: ${dropdown.value}`);
+            
+            await generateControls(); // Re-download JSON and regenerate controls
+        }
+
+        async function sendMessageValue(messageId, event) {
+            event.preventDefault(); // Prevent page refresh
+            const textBox = document.getElementById(`${messageId}TextBox`);
+            const instanceParam = textBox.dataset.instanceParam;
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.send(`${messageId}=${textBox.value}&instanceParam=${instanceParam}&action=connect`);
+            console.log(`Message ${messageId} value sent: ${textBox.value}`);
+            
+            await generateControls(); // Re-download JSON and regenerate controls
+        }
+
+        async function fetchJSON() {
+            try {
+                const server = "{{ server }}";
+                const port = "{{ data_retrieve_port }}";
+                const response = await fetch(`http://${server}:${port}/`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                console.log('Fetched JSON:', data);
+                return data;
+            } catch (error) {
+                console.error('Error fetching JSON:', error);
+                return null;
+            }
+        }
+
+        function createSlider(id, label, min, max, value, instanceParam) {
+            const container = document.createElement('div');
+            container.className = 'control-container';
+            const labelElement = document.createElement('label');
+            labelElement.setAttribute('for', id);
+            labelElement.innerText = label;
+            const valueSpan = document.createElement('span');
+            valueSpan.id = `${id}Value`;
+            valueSpan.className = 'value-span';
+            valueSpan.innerText = parseFloat(value).toFixed(1); // Display rounded value
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.id = id;
+            slider.name = id;
+            slider.min = min;
+            slider.max = max;
+            slider.value = value;
+            slider.step = "0.01"; // Allow full float values
+            slider.dataset.instanceParam = instanceParam;
+            slider.oninput = () => sendSliderValue(id);
+            slider.onchange = () => sendSliderValueOnRelease(id); // Trigger generateControls on release
+            container.appendChild(labelElement);
+            container.appendChild(valueSpan);
+            container.appendChild(slider);
+            return container;
+        }
+
+        function createDropdown(id, label, options, value, instanceParam) {
+            const container = document.createElement('div');
+            container.className = 'control-container';
+            const labelElement = document.createElement('label');
+            labelElement.setAttribute('for', id);
+            labelElement.innerText = label;
+            const valueSpan = document.createElement('span');
+            valueSpan.id = `${id}Value`;
+            valueSpan.className = 'value-span';
+            valueSpan.innerText = value || 'no file loaded'; // Display current value or "no file loaded"
+            const dropdown = document.createElement('select');
+            dropdown.id = id;
+            dropdown.name = id;
+            dropdown.dataset.instanceParam = instanceParam;
+            dropdown.onchange = () => sendDropdownValue(id);
+            options.forEach(optionValue => {
+                const option = document.createElement('option');
+                option.value = optionValue;
+                option.text = optionValue;
+                if (optionValue === value) {
+                    option.selected = true;
+                }
+                dropdown.appendChild(option);
+            });
+            container.appendChild(labelElement);
+            container.appendChild(valueSpan);
+            container.appendChild(dropdown);
+            return container;
+        }
+
+        function createDataRefDropdown(id, label, options, value, instanceParam) {
+            const container = document.createElement('div');
+            container.className = 'control-container data-ref-container';
+            const labelElement = document.createElement('label');
+            labelElement.setAttribute('for', id);
+            labelElement.innerText = label;
+            const valueSpan = document.createElement('span');
+            valueSpan.id = `${id}Value`;
+            valueSpan.className = 'value-span';
+            valueSpan.innerText = value || 'no file loaded'; // Display current value or "no file loaded"
+            const dropdown = document.createElement('select');
+            dropdown.id = id;
+            dropdown.name = id;
+            dropdown.dataset.instanceParam = instanceParam;
+            dropdown.onchange = () => sendDropdownValue(id);
+            options.forEach(optionValue => {
+                const option = document.createElement('option');
+                option.value = optionValue;
+                option.text = optionValue;
+                if (optionValue === value) {
+                    option.selected = true;
+                }
+                dropdown.appendChild(option);
+            });
+            container.appendChild(labelElement);
+            container.appendChild(valueSpan);
+            container.appendChild(dropdown);
+            return container;
+        }
+
+        function createTextBox(id, label, value, instanceParam) {
+            const container = document.createElement('div');
+            container.className = 'control-container';
+            const labelElement = document.createElement('label');
+            labelElement.setAttribute('for', id);
+            labelElement.innerText = label;
+            const textBox = document.createElement('input');
+            textBox.type = 'text';
+            textBox.id = `${id}TextBox`;
+            textBox.name = id;
+            textBox.value = value;
+            textBox.dataset.instanceParam = instanceParam;
+            const button = document.createElement('button');
+            button.innerText = 'Send';
+            button.onclick = (event) => sendMessageValue(id, event);
+            container.appendChild(labelElement);
+            container.appendChild(textBox);
+            container.appendChild(button);
+            return container;
+        }
+
+        // ...existing code...
+        async function generateControls() {
+            const json = await fetchJSON();
+            if (!json) {
+                console.error('No JSON data available to generate controls.');
+                return;
+            }
+            console.log('JSON data structure:', json);
+            const parameterControls = document.getElementById('parameterControls');
+            parameterControls.innerHTML = ''; // Clear existing controls
+
+            // Parse the JSON response to extract filenames
+            const filenames = [];
+            const contentString = json.CONTENTS?.rnbo?.CONTENTS?.resp?.VALUE;
+            if (contentString) {
+                const parsedContent = JSON.parse(contentString);
+                const content = JSON.parse(parsedContent.result.content);
+                for (let i = 0; i < content.length; i++) {
+                    const filePath = content[i];
+                    const fileName = filePath.substring(filePath.lastIndexOf('/') + 1);
+                    filenames.push(fileName); // Add the filename to the filenames array
+                }
+                // console.log('Parsed filenames:', filenames); // Debug statement
+            } else {
+                console.error('No content found in the JSON response.');
+            }
+
+            // Iterate over each instance in the JSON data
+            Object.keys(json.CONTENTS?.rnbo?.CONTENTS?.inst?.CONTENTS || {}).forEach(instanceId => {
+                const instance = json.CONTENTS.rnbo.CONTENTS.inst.CONTENTS[instanceId];
+                const instanceName = instance.CONTENTS?.name?.VALUE;
+                if (!instanceName) {
+                    console.error(`Instance ${instanceId} does not have a valid name property.`);
+                    return;
+                }
+                const instanceDiv = document.createElement('div');
+                const instanceTitle = document.createElement('h2');
+                instanceTitle.innerText = `${instanceName} Controls`;
+                instanceDiv.appendChild(instanceTitle);
+
+                if (!instance.CONTENTS?.params?.CONTENTS) {
+                    console.error(`Instance ${instanceId} does not have valid params.`);
+                    return;
+                }
+
+                // Create controls for each parameter
+                Object.keys(instance.CONTENTS.params.CONTENTS).forEach(paramId => {
+                    const param = instance.CONTENTS.params.CONTENTS[paramId];
+                    if (!param.TYPE) {
+                        console.error(`Parameter ${paramId} does not have a valid TYPE property.`);
+                        return;
+                    }
+                    if (param.TYPE === 'f') {
+                        const slider = createSlider(
+                            `${instanceId}_${paramId}`,
+                            paramId,
+                            param.RANGE[0].MIN,
+                            param.RANGE[0].MAX,
+                            param.VALUE,
+                            param.FULL_PATH
+                        );
+                        instanceDiv.appendChild(slider);
+                    } else if (param.TYPE === 's' && param.RANGE) {
+                        const dropdown = createDropdown(
+                            `${instanceId}_${paramId}`,
+                            paramId,
+                            param.RANGE[0].VALS,
+                            param.VALUE,
+                            param.FULL_PATH
+                        );
+                        instanceDiv.appendChild(dropdown);
+                    }
+                });
+
+                // Create controls for each message
+                if (instance.CONTENTS?.messages?.CONTENTS?.in?.CONTENTS) {
+                    Object.keys(instance.CONTENTS.messages.CONTENTS.in.CONTENTS).forEach(messageId => {
+                        const message = instance.CONTENTS.messages.CONTENTS.in.CONTENTS[messageId];
+                        const textBox = createTextBox(
+                            `${instanceId}_messages_in_${messageId}`,
+                            messageId,
+                            '1',
+                            message.FULL_PATH
+                        );
+                        instanceDiv.appendChild(textBox);
+                    });
+                }
+
+                // Create dropdowns for data_refs using the parsed filenames
+                if (instance.CONTENTS?.data_refs?.CONTENTS) {
+                    Object.keys(instance.CONTENTS.data_refs.CONTENTS).forEach(dataRefId => {
+                        const dataRef = instance.CONTENTS.data_refs.CONTENTS[dataRefId];
+                        const currentValue = dataRef.VALUE || 'no file loaded';
+                        const dropdown = createDataRefDropdown(
+                            `${instanceId}_data_refs_${dataRefId}`,
+                            dataRefId,
+                            filenames, // Use the filenames array for dropdown options
+                            currentValue,
+                            dataRef.FULL_PATH
+                        );
+                        // console.log(`Creating dropdown for dataRefId: ${dataRefId} with options:`, filenames); // Debug statement
+                        instanceDiv.appendChild(dropdown);
+                    });
+                }
+
+                parameterControls.appendChild(instanceDiv);
+            });
+            console.log('Controls generated successfully.');
+        }
+        // ...existing code...
+
+        window.onload = function() {
+            console.log('Window loaded, generating controls...');
+            generateControls();
+        };
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="header">
+        <h1>RNBO Control</h1>
+        <div class="controls">
+            <form method="POST">
+                <label for="server">Server:</label>
+                <input type="text" id="server" name="server" value="{{ server }}">
+            </form>
+        </div>
+    </div>
+    <div class="parameter-controls" id="parameterControls"></div>
+</body>
+</html>

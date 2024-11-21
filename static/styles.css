@@ -1,0 +1,114 @@
+
+body {
+    background-color: #121212;
+    color: #e0e0e0;
+    font-family: Arial, sans-serif;
+}
+h1, h2 {
+    color: #bb86fc;
+}
+label {
+    color: #e0e0e0;
+}
+input[type="text"], select {
+    background-color: #333;
+    color: #e0e0e0;
+    border: 1px solid #444;
+}
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    background: #444;
+    height: 30px; /* Increase height for better touch interaction */
+}
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 30px; /* Increase width for better touch interaction */
+    height: 30px; /* Increase height for better touch interaction */
+    background: #bb86fc;
+    cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+    width: 30px; /* Increase width for better touch interaction */
+    height: 30px; /* Increase height for better touch interaction */
+    background: #bb86fc;
+    cursor: pointer;
+}
+button {
+    background-color: #333;
+    color: #e0e0e0;
+    border: 1px solid #444;
+    padding: 10px;
+    cursor: pointer;
+}
+button.active {
+    background-color: green;
+}
+button:hover {
+    background-color: #444;
+}
+select {
+    background-color: #333;
+    color: #e0e0e0;
+    border: 1px solid #444;
+}
+span {
+    color: #bb86fc;
+    display: inline-block;
+    width: 50px; /* Fixed width for value display */
+}
+form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+}
+form label, form input {
+    margin-right: 10px;
+}
+form input[type="text"] {
+    flex: 1;
+}
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.header h1 {
+    margin: 0;
+}
+.controls {
+    display: flex;
+    align-items: center;
+}
+.controls label, .controls input {
+    margin-right: 10px;
+}
+.controls input[type="text"] {
+    flex: 1;
+}
+.parameter-controls {
+    margin-top: 20px;
+}
+.control-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.control-container label {
+    margin-right: 10px;
+}
+.control-container input[type="text"] {
+    margin-right: 10px; /* Add padding gap between text box and Send button */
+}
+.data-ref-container {
+    justify-content: space-between;
+}
+.data-ref-container .value-span {
+    flex: 1;
+    text-align: center;
+}
+.data-ref-container select {
+    flex: 1;
+}
