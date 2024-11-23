@@ -188,14 +188,18 @@
             const filenames = [];
             const contentString = json.CONTENTS?.rnbo?.CONTENTS?.resp?.VALUE;
             if (contentString) {
-                const parsedContent = JSON.parse(contentString);
-                const content = JSON.parse(parsedContent.result.content);
-                for (let i = 0; i < content.length; i++) {
-                    const filePath = content[i];
-                    const fileName = filePath.substring(filePath.lastIndexOf('/') + 1);
-                    filenames.push(fileName); // Add the filename to the filenames array
+                try {
+                    const parsedContent = JSON.parse(contentString);
+                    const content = JSON.parse(parsedContent.result.content);
+                    for (let i = 0; i < content.length; i++) {
+                        const filePath = content[i];
+                        const fileName = filePath.substring(filePath.lastIndexOf('/') + 1);
+                        filenames.push(fileName); // Add the filename to the filenames array
+                    }
+                    // console.log('Parsed filenames:', filenames); // Debug statement
+                } catch (error) {
+                    console.error('Error parsing content:', error);
                 }
-                // console.log('Parsed filenames:', filenames); // Debug statement
             } else {
                 console.error('No content found in the JSON response.');
             }
