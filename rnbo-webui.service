@@ -1,0 +1,7 @@
+
+[Unit]
+Description=pwd test
+[Service]
+ExecStart=/home/pi/RNBO-Dynamic-WebUI/venv/bin/python3 /home/pi/RNBO-Dynamic-WebUI/app.py
+[Install]
+WantedBy=multi-user.target
