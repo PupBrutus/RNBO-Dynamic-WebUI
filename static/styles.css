@@ -244,3 +244,14 @@ select { width: 100%; }
     input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; }
     input[type="text"], select { font-size: 16px; } /* stops iOS zoom on focus */
 }
+
+/* sound file picker */
+.file-note {
+    margin-top: 6px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+.file-note-ok { color: var(--accent); }
+.file-note-warn { color: #e2b45a; }
+.file-note-error { color: var(--danger); }

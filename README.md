@@ -7,6 +7,12 @@ instance, with no per-patch configuration:
 
 - **Controls** for every parameter, message inport and data ref (buffer). Values are sent to the
   runner over OSC (UDP 1234) through the Flask app.
+- **Sound files**: each buffer (data ref) gets a picker listing the files in the runner's datafile
+  directory (`~/Documents/rnbo/datafiles`, where the runner panel uploads to). The Flask endpoint
+  `/api/datafiles` asks the runner for the listing (JSON-RPC `file_read` with `filetype: datafile`
+  sent to `/rnbo/cmd`, reply read from `/rnbo/resp`) and caches it until
+  `/rnbo/info/datafile_dir_mtime` changes, so uploads appear on the next hover/touch of the picker or
+  within 10 s. After you pick a file, the page reads the buffer back to confirm the runner loaded it.
 - **Routing**: each card shows where its audio comes from and goes to, read from the instance's JACK
   connections (`/rnbo/inst/N/jack/connections/audio/{sinks,sources}`). `system:capture_*` is shown
   as **Mic in**, `system:playback_*` as **Output** and `rnbo-record` as **Recorder**. Click an

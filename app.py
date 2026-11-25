@@ -1,8 +1,13 @@
-from flask import Flask, render_template, request
+from flask import Flask, jsonify, render_template, request
 from jinja2 import TemplateNotFound
 from pythonosc.udp_client import SimpleUDPClient
-import socket
+import json
 import os
+import socket
+import threading
+import time
+import urllib.request
+import uuid
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
@@ -37,11 +42,73 @@ def to_osc_value(value):
         return value
 
 
+OSC_PORT = 1234
+QUERY_PORT = 5678
+
+# Datafile listing cache, keyed on the runner's datafile_dir_mtime so uploads
+# and deletions made in the runner panel show up on the next request.
+_datafiles_lock = threading.Lock()
+_datafiles_cache = {'mtime': None, 'files': []}
+
+
+def query_value(server, path):
+    """Read one OSCQuery node's VALUE from the runner."""
+    with urllib.request.urlopen(f'http://{server}:{QUERY_PORT}{path}', timeout=2) as res:
+        return json.load(res).get('VALUE')
+
+
+def list_datafiles(server, timeout=3.0):
+    """Ask the runner for the files in its datafile directory.
+
+    The runner answers JSON-RPC commands sent to /rnbo/cmd by writing the reply
+    to /rnbo/resp. `file_read` with filetype "datafile" and no filename returns
+    the directory listing as a JSON array of paths in result.content.
+    """
+    request_id = str(uuid.uuid4())
+    command = {
+        'jsonrpc': '2.0',
+        'id': request_id,
+        'method': 'file_read',
+        'params': {'filetype': 'datafile', 'size': 1048576},
+    }
+    SimpleUDPClient(server, OSC_PORT).send_message('/rnbo/cmd', json.dumps(command))
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        time.sleep(0.05)
+        raw = query_value(server, '/rnbo/resp')
+        try:
+            reply = json.loads(raw) if raw else {}
+        except ValueError:
+            continue
+        if reply.get('id') != request_id:
+            continue
+        if 'error' in reply:
+            raise RuntimeError(reply['error'].get('message', 'runner error'))
+        paths = json.loads(reply['result']['content'])
+        return sorted((p.rsplit('/', 1)[-1] for p in paths), key=str.lower)
+    raise TimeoutError('runner did not answer the datafile listing request')
+
+
+@app.route('/api/datafiles')
+def datafiles():
+    server = detect_server()
+    with _datafiles_lock:  # one command in flight at a time; /rnbo/resp holds only the last reply
+        try:
+            mtime = query_value(server, '/rnbo/info/datafile_dir_mtime')
+            if mtime is None or mtime != _datafiles_cache['mtime']:
+                _datafiles_cache['files'] = list_datafiles(server)
+                _datafiles_cache['mtime'] = mtime
+            return jsonify(files=_datafiles_cache['files'], mtime=mtime)
+        except Exception as e:
+            print(f"Failed to list datafiles: {e}")
+            return jsonify(error=str(e), files=_datafiles_cache['files']), 502
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     server = detect_server()
-    port = '1234'
-    data_retrieve_port = '5678'
+    port = str(OSC_PORT)
+    data_retrieve_port = str(QUERY_PORT)
     if request.method == 'POST':
         action = request.form.get('action')
         instance_param = request.form.get('instanceParam')

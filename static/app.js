@@ -184,27 +184,17 @@
         return row;
     }
 
-    function createSelect({ label, options, value, path, placeholder, onChange }) {
+    function createSelect({ label, options, value, path }) {
         const { row } = controlShell(label, 'control-select');
         const select = el('select');
         select.setAttribute('aria-label', label);
-        if (placeholder && !options.includes(value)) {
-            const opt = el('option', null, placeholder);
-            opt.value = '';
-            opt.disabled = true;
-            opt.selected = true;
-            select.appendChild(opt);
-        }
         options.forEach(optionValue => {
             const opt = el('option', null, optionValue);
             opt.value = optionValue;
             if (optionValue === value) opt.selected = true;
             select.appendChild(opt);
         });
-        select.addEventListener('change', async () => {
-            await send(path, select.value);
-            if (onChange) onChange(select.value);
-        });
+        select.addEventListener('change', () => send(path, select.value));
         row.appendChild(select);
         return row;
     }
@@ -285,16 +275,99 @@
         return { el: node, order: meta.order, group: 1, sortKey: messageId };
     }
 
-    function buildDataRef(dataRefId, dataRef, filenames) {
+    // ---------- sound files (data refs) ----------
+
+    // Files in the runner's datafile directory, fetched through Flask (/api/datafiles),
+    // which asks the runner directly and caches on the directory's mtime.
+    const datafiles = { files: [], error: null };
+    const filePickers = new Set(); // refresh callbacks of the pickers currently on the page
+
+    async function loadDatafiles() {
+        try {
+            const res = await fetch('/api/datafiles');
+            const body = await res.json();
+            datafiles.files = body.files || [];
+            datafiles.error = res.ok ? null : body.error || `HTTP ${res.status}`;
+        } catch (error) {
+            datafiles.error = String(error);
+        }
+        filePickers.forEach(refresh => refresh());
+    }
+
+    async function readNodeValue(path) {
+        const res = await fetch(`http://${config.server}:${config.queryPort}${path}`);
+        return (await res.json()).VALUE;
+    }
+
+    function createFilePicker({ label, value, path }) {
+        const { row } = controlShell(label, 'control-select control-file');
+        const select = el('select');
+        select.setAttribute('aria-label', label);
+        const note = el('div', 'file-note');
+        let current = value || '';
+
+        function setNote(text, kind) {
+            note.textContent = text;
+            note.className = 'file-note' + (kind ? ` file-note-${kind}` : '');
+        }
+
+        function populate() {
+            if (document.activeElement === select) return; // don't rebuild an open list
+            select.replaceChildren();
+            const placeholder = el('option', null, datafiles.files.length ? 'Choose a sound file…' : 'No sound files on the device');
+            placeholder.value = '';
+            placeholder.disabled = true;
+            select.appendChild(placeholder);
+            const names = datafiles.files.includes(current) || !current ? datafiles.files : [current, ...datafiles.files];
+            names.forEach(name => {
+                const opt = el('option', null, name);
+                opt.value = name;
+                select.appendChild(opt);
+            });
+            select.value = current;
+            if (!current) placeholder.selected = true;
+            if (datafiles.error) setNote(`Could not list files: ${datafiles.error}`, 'error');
+            else if (current && !datafiles.files.includes(current)) setNote(`Loaded: ${current} (no longer on the device)`, 'warn');
+            else if (current) setNote(`Loaded: ${current}`, 'ok');
+            else setNote('No file loaded');
+        }
+
+        // Pick up newly uploaded files before the list opens (hover on desktop, touch on phones).
+        select.addEventListener('pointerenter', loadDatafiles);
+        select.addEventListener('touchstart', loadDatafiles, { passive: true });
+        select.addEventListener('blur', populate);
+        select.addEventListener('change', async () => {
+            const wanted = select.value;
+            setNote(`Loading ${wanted}…`);
+            await send(path, wanted);
+            // Confirm the runner actually loaded it by reading the data ref back.
+            for (let i = 0; i < 20; i++) {
+                await new Promise(r => setTimeout(r, 150));
+                try {
+                    if ((await readNodeValue(path)) === wanted) {
+                        current = wanted;
+                        setNote(`Loaded: ${wanted}`, 'ok');
+                        return;
+                    }
+                } catch (e) { /* keep trying until the timeout */ }
+            }
+            setNote(`Runner did not confirm loading ${wanted}`, 'error');
+        });
+
+        populate();
+        filePickers.add(populate);
+        row.appendChild(select);
+        row.appendChild(note);
+        return row;
+    }
+
+    function buildDataRef(dataRefId, dataRef) {
         const meta = parseMeta(dataRef.CONTENTS?.meta?.VALUE);
         if (meta.ui === 'hidden') return null;
-        const node = createSelect({
+        const node = createFilePicker({
             label: meta.label || prettyName(dataRefId),
-            options: filenames,
             value: dataRef.VALUE,
-            path: dataRef.FULL_PATH,
-            placeholder: dataRef.VALUE || 'no file loaded',
-            onChange: () => setTimeout(generateControls, 500)
+            path: dataRef.FULL_PATH
         });
         return { el: node, order: meta.order, group: 2, sortKey: dataRefId };
     }
@@ -374,27 +447,12 @@
 
     // ---------- main ----------
 
-    function extractFilenames(rnbo) {
-        // The runner's last command response may hold a datafile listing (as before).
-        const filenames = [];
-        const contentString = rnbo?.CONTENTS?.resp?.VALUE;
-        if (!contentString) return filenames;
-        try {
-            const parsed = JSON.parse(contentString);
-            const content = JSON.parse(parsed.result.content);
-            content.forEach(filePath => filenames.push(filePath.substring(filePath.lastIndexOf('/') + 1)));
-        } catch (error) {
-            console.warn('No datafile listing in runner response:', error);
-        }
-        return filenames;
-    }
-
     async function generateControls() {
         const grid = document.getElementById('parameterControls');
         setStatus('Loading…');
         let json;
         try {
-            json = await fetchJSON();
+            [json] = await Promise.all([fetchJSON(), loadDatafiles()]);
         } catch (error) {
             console.error('Error fetching JSON:', error);
             setStatus(`Cannot reach runner at ${config.server}:${config.queryPort}`, true);
@@ -402,7 +460,7 @@
         }
 
         const rnbo = json.CONTENTS?.rnbo;
-        const filenames = extractFilenames(rnbo);
+        filePickers.clear(); // pickers from the previous render are about to be replaced
         const instances = Object.entries(rnbo?.CONTENTS?.inst?.CONTENTS || {})
             .filter(([id, inst]) => /^\d+$/.test(id) && inst.CONTENTS?.name?.VALUE)
             .sort((a, b) => Number(a[0]) - Number(b[0]));
@@ -444,7 +502,7 @@
             const items = [];
             Object.entries(c.params?.CONTENTS || {}).forEach(([pid, p]) => items.push(buildParam(pid, p)));
             Object.entries(c.messages?.CONTENTS?.in?.CONTENTS || {}).forEach(([mid, m]) => items.push(buildInport(mid, m)));
-            Object.entries(c.data_refs?.CONTENTS || {}).forEach(([did, d]) => items.push(buildDataRef(did, d, filenames)));
+            Object.entries(c.data_refs?.CONTENTS || {}).forEach(([did, d]) => items.push(buildDataRef(did, d)));
 
             const controls = el('div', 'card-controls');
             const visible = items.filter(Boolean).sort(compareItems);
@@ -476,5 +534,9 @@
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('refreshButton').addEventListener('click', generateControls);
         generateControls();
+        // Keep sound file lists current; the server only re-lists when the directory changed.
+        setInterval(() => {
+            if (!document.hidden && filePickers.size) loadDatafiles();
+        }, 10000);
     });
 })();
