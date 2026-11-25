@@ -1,7 +1,6 @@
-from flask import Flask, render_template, request, url_for
+from flask import Flask, render_template, request
 from jinja2 import TemplateNotFound
 from pythonosc.udp_client import SimpleUDPClient
-import requests
 import socket
 import os
 
