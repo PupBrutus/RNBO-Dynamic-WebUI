@@ -3,20 +3,44 @@ from jinja2 import TemplateNotFound
 from pythonosc.udp_client import SimpleUDPClient
 import requests
 import socket
+import os
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
+
+def detect_server():
+    """Return the RNBO runner host.
+
+    Set the RNBO_HOST environment variable to point at a runner on another
+    machine (e.g. when developing on a laptop against the Pi). Otherwise the
+    local IP is used, which is correct when this app runs on the Pi itself.
+    """
+    override = os.environ.get('RNBO_HOST')
+    if override:
+        return override
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(0)
         s.connect(('10.254.254.254', 1))  # Dummy IP address to get the local IP
         server = s.getsockname()[0]
         s.close()
+        return server
     except Exception as e:
         print(f"Failed to get external IP address: {e}")
-        server = '127.0.0.1'
+        return '127.0.0.1'
+
+
+def to_osc_value(value):
+    """Send numbers (including negatives) as floats, anything else as a string."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return value
+
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    server = detect_server()
     port = '1234'
     data_retrieve_port = '5678'
     if request.method == 'POST':
@@ -27,8 +51,8 @@ def index():
                 client = SimpleUDPClient(server, int(port))
                 for key, value in request.form.items():
                     if key not in ['action', 'instanceParam']:
-                        client.send_message(instance_param, float(value) if value.replace('.', '', 1).isdigit() else value)
-                print(f"Connected and sent data to {server}:{port}")
+                        client.send_message(instance_param, to_osc_value(value))
+                print(f"Sent {instance_param} to {server}:{port}")
                 return '', 204  # No Content response for AJAX request
             except Exception as e:
                 print(f"Failed to connect to server: {e}")
@@ -42,4 +66,4 @@ def index():
         return "Template not found", 404
 
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=8080)  # Listen on all network interfaces
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))  # Listen on all network interfaces
